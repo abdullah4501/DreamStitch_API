@@ -4,7 +4,12 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start": "nodemon — experimental-modules server.js"
+    "start": "node server.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:push": "prisma db push",
+    "seed": "node prisma/seed.js"
   },
   "repository": {
     "type": "git",
@@ -17,9 +22,11 @@
   },
   "homepage": "",
   "dependencies": {
+    "@prisma/client": "^5.22.0",
     "apollo-link-http": "^1.5.17",
     "apollo-server": "^2.16.1",
     "apollo-server-express": "^2.15.0",
+    "bcryptjs": "^2.4.3",
     "body-parser": "^1.19.0",
     "class-transformer": "^0.2.3",
     "easygraphql-format-error": "0.0.3",
@@ -29,8 +36,13 @@
     "graphql": "^14.6.0",
     "graphql-tools": "^6.0.10",
     "graphql-yoga": "^1.18.3",
+    "jsonwebtoken": "^9.0.2",
     "lodash": "^4.17.15",
     "nodemon": "^2.0.4",
+    "prisma": "^5.22.0",
     "react-slide-toggle": "^0.3.5"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   }
 }

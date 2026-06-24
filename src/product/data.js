@@ -4,18 +4,20 @@ const productImages = [
   ["/assets/images/final/KS_03915.jpg", "/assets/images/final/KS_03916.jpg", "/assets/images/final/KS_03917.jpg"],
   ["/assets/images/final/KS_03936.JPG", "/assets/images/final/KS_03952.jpg", "/assets/images/final/KS_03953.jpg"],
   ["/assets/images/final/KS_03954.JPG", "/assets/images/final/KS_03956.jpg", "/assets/images/final/KS_03957.jpg"],
-  ["/assets/images/final/KS_03975.JPG", "/assets/images/final/KS_03975-1.JPG", "/assets/images/final/KS_03976.jpg", "/assets/images/final/KS_03977.jpg"],
-  ["/assets/images/final/KS_04039.JPG", "/assets/images/final/KS_04047.JPG", "/assets/images/final/KS_04053.JPG"],
-  ["/assets/images/final/KS_04057.jpg", "/assets/images/final/KS_04064.jpg", "/assets/images/final/KS_04067.JPG"],
-  ["/assets/images/final/KS_04069.jpg", "/assets/images/final/KS_04076.JPG", "/assets/images/final/KS_04088.jpg", "/assets/images/final/KS_04089.jpg"],
+  ["/assets/images/final/KS_03975.JPG", "/assets/images/final/KS_03976.jpg", "/assets/images/final/KS_03977.jpg"],
+  ["/assets/images/final/KS_04039.JPG", "/assets/images/final/KS_04047.JPG", "/assets/images/final/KS_04053.JPG", "/assets/images/final/KS_04057.jpg"],
+  ["/assets/images/final/KS_04064.jpg", "/assets/images/final/KS_04067.JPG", "/assets/images/final/KS_04069.jpg"],
+  ["/assets/images/final/KS_04076.jpg", "/assets/images/final/KS_04088.jpg", "/assets/images/final/KS_04089.jpg"],
   ["/assets/images/final/KS_04105.JPG", "/assets/images/final/KS_04108.jpg", "/assets/images/final/KS_04110.JPG"],
   ["/assets/images/final/KS_04121.jpg", "/assets/images/final/KS_04122.jpg", "/assets/images/final/KS_04123.JPG"],
   ["/assets/images/final/KS_04125.JPG", "/assets/images/final/KS_04126.JPG", "/assets/images/final/KS_04127.jpg"],
-  ["/assets/images/final/KS_04145.jpg", "/assets/images/final/KS_04145 1.jpg", "/assets/images/final/KS_04145 2.jpg", "/assets/images/final/KS_04145 3.jpg", "/assets/images/final/KS_041452 copy.jpg"],
-  ["/assets/images/final/KS_04146.jpg", "/assets/images/final/KS_04147.jpg", "/assets/images/final/KS_04155.jpg"],
-  ["/assets/images/final/KS_04157.jpg", "/assets/images/final/KS_04170.JPG", "/assets/images/final/KS_04172.jpg"],
-  ["/assets/images/final/KS_04173.jpg", "/assets/images/final/KS_04198.JPG", "/assets/images/final/KS_04201.JPG", "/assets/images/final/KS_04203.jpg", "/assets/images/final/KS_04204.jpg"],
+  ["/assets/images/final/KS_04145.jpg", "/assets/images/final/KS_04146.jpg", "/assets/images/final/KS_04147.jpg"],
+  ["/assets/images/final/KS_04155.jpg", "/assets/images/final/KS_04157.jpg"],
+  ["/assets/images/final/KS_04170.JPG", "/assets/images/final/KS_04172.jpg", "/assets/images/final/KS_04173.jpg"],
+  ["/assets/images/final/KS_04170.JPG", "/assets/images/final/KS_04172.jpg", "/assets/images/final/KS_04173.jpg"],
 ];
+
+const productRatings = [5, 4.5, 5, 4.5, 5, 4, 4.5, 5, 4, 4.5, 5, 4.5, 4, 4.5, 5, 4];
 
 const sizeVariants = (id, imageId) =>
   ["S", "M", "L", "XL", "XXL"].map((size, index) => ({
@@ -38,6 +40,7 @@ const createProduct = ({ id, title, description, price, tags, stock = 10 }) => (
   price,
   sale: false,
   discount: "0",
+  rating: productRatings[id - 1] || 5,
   stock,
   new: false,
   tags,
