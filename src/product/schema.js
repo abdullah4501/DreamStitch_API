@@ -50,6 +50,8 @@ const typeDefs = `
     lastName: String
     email: String!
     phone: String
+    emailVerified: Boolean
+    authProvider: String
     isAdmin: Boolean
     addresses: [Address]
     createdAt: String
@@ -73,6 +75,12 @@ const typeDefs = `
     user: User!
   }
 
+  type OtpResponse {
+    success: Boolean!
+    message: String!
+    expiresAt: String
+  }
+
   type Cart {
     id: ID!
     userId: String
@@ -87,6 +95,7 @@ const typeDefs = `
     product: Product
     productId: Int
     variantId: String
+    variantSize: String
     quantity: Int
     price: Int
     total: Int
@@ -121,6 +130,7 @@ const typeDefs = `
     product: Product
     productId: Int
     variantId: String
+    variantSize: String
     productTitle: String
     imageSrc: String
     quantity: Int
@@ -251,6 +261,12 @@ const typeDefs = `
     password: String!
   }
 
+  input ProfileInput {
+    firstName: String
+    lastName: String
+    phone: String
+  }
+
   input AddressInput {
     fullName: String
     phone: String
@@ -318,6 +334,7 @@ const typeDefs = `
     cart(sessionId: String): Cart
     myOrders: [Order]
     order(id: ID!): Order
+    orderByNumber(orderNumber: String!): Order
     productReviews(productId: Int!): [Review]
     fabrics: [Fabric]
     madeToOrderRequests: [MadeToOrderRequest]
@@ -333,8 +350,14 @@ const typeDefs = `
 
   type Mutation {
     register(input: RegisterInput!): AuthPayload!
+    requestRegistrationOtp(input: RegisterInput!): OtpResponse!
+    verifyRegistrationOtp(email: String!, otp: String!): AuthPayload!
+    resendEmailOtp(email: String!): OtpResponse!
     login(email: String!, password: String!): AuthPayload!
+    loginWithGoogle(idToken: String!): AuthPayload!
+    updateProfile(input: ProfileInput!): User!
     addAddress(input: AddressInput!): Address!
+    saveDefaultAddress(input: AddressInput!): Address!
     addToCart(sessionId: String, productId: Int!, variantId: String, quantity: Int!): Cart!
     updateCartItem(cartItemId: ID!, quantity: Int!): Cart!
     removeCartItem(cartItemId: ID!): Cart!

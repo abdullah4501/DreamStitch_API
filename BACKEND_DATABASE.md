@@ -10,7 +10,18 @@ Set these locally and on Render:
 DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DATABASE?schema=public"
 DIRECT_URL="postgresql://USER:PASSWORD@HOST:5432/DATABASE?schema=public"
 JWT_SECRET="replace-with-a-long-random-secret"
+GOOGLE_CLIENT_ID="your-google-oauth-web-client-id.apps.googleusercontent.com"
+RESEND_API_KEY="re_xxxxxxxxx"
+OTP_EMAIL_FROM="Dream Stitch <verify@your-domain.com>"
+OTP_TTL_MINUTES="10"
 ```
+
+Email verification uses Resend. In local development, if `RESEND_API_KEY` is not set, the backend prints the OTP in the terminal so registration can still be tested. For production, add a verified sending domain in Resend and set `OTP_EMAIL_FROM` to an address on that domain.
+
+Google login needs the same Google OAuth Web Client ID on both sides:
+
+- Backend: `GOOGLE_CLIENT_ID`
+- Frontend: `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
 
 Optional seed admin account:
 
@@ -27,6 +38,9 @@ Create a Supabase PostgreSQL project, then create a local `.env` file from `.env
 DATABASE_URL="postgresql://USER:PASSWORD@POOLER-HOST:6543/postgres?pgbouncer=true&connection_limit=1&schema=public"
 DIRECT_URL="postgresql://USER:PASSWORD@POOLER-HOST:5432/postgres?schema=public"
 JWT_SECRET="replace-with-a-long-random-secret"
+GOOGLE_CLIENT_ID="your-google-oauth-web-client-id.apps.googleusercontent.com"
+RESEND_API_KEY="re_xxxxxxxxx"
+OTP_EMAIL_FROM="Dream Stitch <verify@your-domain.com>"
 ```
 
 Use Supabase's pooler connection strings:

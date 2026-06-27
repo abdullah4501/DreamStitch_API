@@ -46,6 +46,9 @@ model User {
   email        String    @unique
   phone        String?   @unique
   passwordHash String
+  emailVerified Boolean  @default(false)
+  googleId      String?
+  authProvider  String   @default("email")
   isAdmin      Boolean   @default(false)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -55,6 +58,23 @@ model User {
   orders              Order[]
   reviews             Review[]
   madeToOrderRequests MadeToOrderRequest[]
+  emailOtps           EmailOtp[]
+}
+
+model EmailOtp {
+  id        String   @id @default(uuid())
+  userId    String
+  email     String
+  codeHash  String
+  purpose   String   @default("EMAIL_VERIFICATION")
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([userId])
 }
 
 model Address {
@@ -202,6 +222,7 @@ model OrderItem {
   orderId      String
   productId    Int
   variantId    String?
+  variantSize  String?
   productTitle String
   imageSrc     String?
   quantity     Int

@@ -1,5 +1,6 @@
 const bcrypt = require("bcryptjs");
 const { signToken } = require("../auth");
+const { createEmailOtp } = require("../email");
 
 const toProductGraph = (product) => {
   if (!product) return null;
@@ -38,7 +39,9 @@ const productInclude = {
 const cartInclude = {
   items: {
     include: {
-      product: productInclude,
+      product: {
+        include: productInclude,
+      },
     },
   },
 };
@@ -46,7 +49,9 @@ const cartInclude = {
 const orderInclude = {
   items: {
     include: {
-      product: productInclude,
+      product: {
+        include: productInclude,
+      },
     },
   },
 };
@@ -66,6 +71,7 @@ const toCartGraph = (cart) => {
     items: items.map((item) => ({
       ...item,
       product: toProductGraph(item.product),
+      variantSize: (item.product?.variants || []).find((variant) => variant.variantId === item.variantId)?.size || null,
       total: item.price * item.quantity,
     })),
     subtotal: items.reduce((sum, item) => sum + item.price * item.quantity, 0),
@@ -84,6 +90,27 @@ const parseMeasurements = (measurements) => {
   } catch (error) {
     return { notes: measurements };
   }
+};
+
+const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
+const normalizeOptional = (value) => {
+  const trimmed = String(value || "").trim();
+  return trimmed || null;
+};
+
+const verifyGoogleToken = async (idToken) => {
+  if (!process.env.GOOGLE_CLIENT_ID) {
+    throw new Error("Google login is not configured.");
+  }
+
+  const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+  if (!response.ok) throw new Error("Invalid Google login token.");
+  const profile = await response.json();
+
+  if (profile.aud !== process.env.GOOGLE_CLIENT_ID) throw new Error("Google login token is not for this app.");
+  if (profile.email_verified !== "true" && profile.email_verified !== true) throw new Error("Google email is not verified.");
+
+  return profile;
 };
 
 const resolvers = {
@@ -217,6 +244,16 @@ const resolvers = {
       return order;
     },
 
+    orderByNumber: async (root, args, { prisma, user }) => {
+      const order = await prisma.order.findUnique({
+        where: { orderNumber: args.orderNumber },
+        include: orderInclude,
+      });
+      if (!order) return null;
+      if (order.userId && (!user || order.userId !== user.id)) throw new Error("Not authorized.");
+      return order;
+    },
+
     productReviews: (root, args, { prisma }) =>
       prisma.review.findMany({
         where: { productId: args.productId, status: "APPROVED" },
@@ -317,16 +354,134 @@ const resolvers = {
 
   Mutation: {
     register: async (root, { input }, { prisma }) => {
-      const existingUser = await prisma.user.findUnique({ where: { email: input.email } });
+      const email = normalizeEmail(input.email);
+      const existingUser = await prisma.user.findUnique({ where: { email } });
       if (existingUser) throw new Error("An account with this email already exists.");
 
       const passwordHash = await bcrypt.hash(input.password, 12);
       const user = await prisma.user.create({
         data: {
-          firstName: input.firstName,
-          lastName: input.lastName,
-          email: input.email,
-          phone: input.phone,
+          firstName: normalizeOptional(input.firstName),
+          lastName: normalizeOptional(input.lastName),
+          email,
+          phone: normalizeOptional(input.phone),
+          passwordHash,
+          emailVerified: true,
+        },
+      });
+
+      return { token: signToken(user), user };
+    },
+
+    requestRegistrationOtp: async (root, { input }, { prisma }) => {
+      const email = normalizeEmail(input.email);
+      const existingUser = await prisma.user.findUnique({ where: { email } });
+
+      if (existingUser && existingUser.emailVerified) {
+        throw new Error("An account with this email already exists.");
+      }
+
+      const passwordHash = await bcrypt.hash(input.password, 12);
+      const data = {
+        firstName: normalizeOptional(input.firstName),
+        lastName: normalizeOptional(input.lastName),
+        email,
+        phone: normalizeOptional(input.phone),
+        passwordHash,
+        emailVerified: false,
+        authProvider: "email",
+      };
+
+      const user = existingUser
+        ? await prisma.user.update({ where: { id: existingUser.id }, data })
+        : await prisma.user.create({ data });
+
+      const expiresAt = await createEmailOtp({ prisma, user });
+
+      return {
+        success: true,
+        message: "Verification code sent to your email.",
+        expiresAt: expiresAt.toISOString(),
+      };
+    },
+
+    verifyRegistrationOtp: async (root, { email, otp }, { prisma }) => {
+      const normalizedEmail = normalizeEmail(email);
+      const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+      if (!user) throw new Error("Account not found.");
+      if (user.emailVerified) return { token: signToken(user), user };
+
+      const record = await prisma.emailOtp.findFirst({
+        where: {
+          userId: user.id,
+          email: normalizedEmail,
+          purpose: "EMAIL_VERIFICATION",
+          usedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      if (!record) throw new Error("Verification code expired. Please request a new code.");
+
+      const validOtp = await bcrypt.compare(String(otp || "").trim(), record.codeHash);
+      if (!validOtp) throw new Error("Invalid verification code.");
+
+      const verifiedUser = await prisma.user.update({
+        where: { id: user.id },
+        data: { emailVerified: true },
+      });
+      await prisma.emailOtp.update({ where: { id: record.id }, data: { usedAt: new Date() } });
+
+      return { token: signToken(verifiedUser), user: verifiedUser };
+    },
+
+    resendEmailOtp: async (root, { email }, { prisma }) => {
+      const normalizedEmail = normalizeEmail(email);
+      const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+      if (!user) throw new Error("Account not found.");
+      if (user.emailVerified) return { success: true, message: "Email is already verified.", expiresAt: null };
+
+      const expiresAt = await createEmailOtp({ prisma, user });
+      return {
+        success: true,
+        message: "Verification code sent to your email.",
+        expiresAt: expiresAt.toISOString(),
+      };
+    },
+
+    login: async (root, { email, password }, { prisma }) => {
+      const user = await prisma.user.findUnique({ where: { email: normalizeEmail(email) } });
+      if (!user) throw new Error("Invalid email or password.");
+      if (!user.emailVerified) throw new Error("Please verify your email before login.");
+
+      const validPassword = await bcrypt.compare(password, user.passwordHash);
+      if (!validPassword) throw new Error("Invalid email or password.");
+
+      return { token: signToken(user), user };
+    },
+
+    loginWithGoogle: async (root, { idToken }, { prisma }) => {
+      const googleProfile = await verifyGoogleToken(idToken);
+      const email = normalizeEmail(googleProfile.email);
+      const nameParts = String(googleProfile.name || "").split(" ");
+      const passwordHash = await bcrypt.hash(`google:${googleProfile.sub}:${process.env.JWT_SECRET || "secret"}`, 12);
+
+      const user = await prisma.user.upsert({
+        where: { email },
+        update: {
+          googleId: googleProfile.sub,
+          emailVerified: true,
+          authProvider: "google",
+          firstName: normalizeOptional(googleProfile.given_name) || normalizeOptional(nameParts[0]),
+          lastName: normalizeOptional(googleProfile.family_name) || normalizeOptional(nameParts.slice(1).join(" ")),
+        },
+        create: {
+          email,
+          googleId: googleProfile.sub,
+          emailVerified: true,
+          authProvider: "google",
+          firstName: normalizeOptional(googleProfile.given_name) || normalizeOptional(nameParts[0]),
+          lastName: normalizeOptional(googleProfile.family_name) || normalizeOptional(nameParts.slice(1).join(" ")),
           passwordHash,
         },
       });
@@ -334,14 +489,17 @@ const resolvers = {
       return { token: signToken(user), user };
     },
 
-    login: async (root, { email, password }, { prisma }) => {
-      const user = await prisma.user.findUnique({ where: { email } });
-      if (!user) throw new Error("Invalid email or password.");
+    updateProfile: async (root, { input }, { prisma, user }) => {
+      if (!user) throw new Error("Login required.");
 
-      const validPassword = await bcrypt.compare(password, user.passwordHash);
-      if (!validPassword) throw new Error("Invalid email or password.");
-
-      return { token: signToken(user), user };
+      return prisma.user.update({
+        where: { id: user.id },
+        data: {
+          firstName: normalizeOptional(input.firstName),
+          lastName: normalizeOptional(input.lastName),
+          phone: normalizeOptional(input.phone),
+        },
+      });
     },
 
     addAddress: async (root, { input }, { prisma, user }) => {
@@ -370,6 +528,42 @@ const resolvers = {
       });
     },
 
+    saveDefaultAddress: async (root, { input }, { prisma, user }) => {
+      if (!user) throw new Error("Login required.");
+
+      await prisma.address.updateMany({
+        where: { userId: user.id },
+        data: { isDefault: false },
+      });
+
+      const existingAddress = await prisma.address.findFirst({
+        where: { userId: user.id },
+        orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
+      });
+
+      const data = {
+        userId: user.id,
+        fullName: input.fullName,
+        phone: input.phone,
+        address1: input.address1,
+        address2: input.address2,
+        city: input.city,
+        province: input.province,
+        postalCode: input.postalCode,
+        country: input.country || "Pakistan",
+        isDefault: true,
+      };
+
+      if (existingAddress) {
+        return prisma.address.update({
+          where: { id: existingAddress.id },
+          data,
+        });
+      }
+
+      return prisma.address.create({ data });
+    },
+
     addToCart: async (root, args, { prisma, user }) => {
       const where = getCartWhere(user, args.sessionId);
       let cart = await prisma.cart.findFirst({ where });
@@ -385,6 +579,7 @@ const resolvers = {
 
       const product = await prisma.product.findUnique({ where: { id: args.productId } });
       if (!product) throw new Error("Product not found.");
+      const discountedPrice = Math.round(product.price - (product.price * (product.discount || 0)) / 100);
 
       await prisma.cartItem.upsert({
         where: {
@@ -396,14 +591,14 @@ const resolvers = {
         },
         update: {
           quantity: { increment: args.quantity },
-          price: product.price,
+          price: discountedPrice,
         },
         create: {
           cartId: cart.id,
           productId: args.productId,
           variantId: args.variantId || "",
           quantity: args.quantity,
-          price: product.price,
+          price: discountedPrice,
         },
       });
 
@@ -450,7 +645,7 @@ const resolvers = {
     createOrder: async (root, { input }, { prisma, user }) => {
       const products = await prisma.product.findMany({
         where: { id: { in: input.items.map((item) => item.productId) } },
-        include: { images: { orderBy: { sortOrder: "asc" } } },
+        include: { images: { orderBy: { sortOrder: "asc" } }, variants: true },
       });
 
       const productMap = new Map(products.map((product) => [product.id, product]));
@@ -458,15 +653,18 @@ const resolvers = {
         const product = productMap.get(item.productId);
         if (!product) throw new Error(`Product ${item.productId} not found.`);
         const quantity = Math.max(1, item.quantity);
+        const variant = product.variants.find((productVariant) => productVariant.variantId === item.variantId);
+        const discountedPrice = Math.round(product.price - (product.price * (product.discount || 0)) / 100);
 
         return {
           productId: product.id,
           variantId: item.variantId || null,
+          variantSize: variant?.size || null,
           productTitle: product.title,
           imageSrc: product.images[0] ? product.images[0].src : null,
           quantity,
-          unitPrice: product.price,
-          total: product.price * quantity,
+          unitPrice: discountedPrice,
+          total: discountedPrice * quantity,
         };
       });
       const subtotal = items.reduce((sum, item) => sum + item.total, 0);

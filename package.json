@@ -21,6 +21,9 @@
     "url": ""
   },
   "homepage": "",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "apollo-link-http": "^1.5.17",
